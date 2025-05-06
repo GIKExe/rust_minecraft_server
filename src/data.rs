@@ -1,30 +1,32 @@
 use std::io::{Read, Write};
 
-#[derive(Debug)]
-pub enum ProtocolError {
+use crate::inet::InetError;
+
+
+
+
+pub enum DataError {
 	ReadError,
-	ConnectionClosed,
-	WriteError
+	WriteError,
+	Inet(InetError),
 }
 
-pub trait DataReader {
-	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, ProtocolError>;
 
-	fn read_byte(&mut self) -> Result<u8, ProtocolError> {
-		Ok(self.read_bytes(1)?[0])
-	}
+pub trait DataReader {
+	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError>;
 }
 
 impl <R: Read> DataReader for R {
-	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, ProtocolError> {
+	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
 		let mut buf = vec![0; size];
 		match self.read(&mut buf) {
+			Err(_) => return Err(DataError::ReadError),
 			Ok(n) => if n == 0 {
-				return Err(ProtocolError::ConnectionClosed);
+				return Err(DataError::Inet(InetError::ConnectionClosed));
 			} else if n < size {
 				buf.truncate(n);
 				buf.append(&mut self.read_bytes(size - n)?);
-			}, Err(_) => return Err(ProtocolError::ReadError)
+			}
 		}; Ok(buf)
 	}
 }
@@ -32,15 +34,11 @@ impl <R: Read> DataReader for R {
 
 
 pub trait DataWriter {
-	fn write_bytes(&mut self, buf: &mut Vec<u8>) -> Result<(), ProtocolError>;
-
-	fn write_byte(&mut self, byte: u8) -> Result<(), ProtocolError> {
-		self.write_bytes(&mut vec![byte])
-	}
+	fn write_bytes(&mut self, buf: Vec<u8>) -> Result<(), DataError>;
 }
 
 impl <W: Write> DataWriter for W {
-	fn write_bytes(&mut self, buf: &mut Vec<u8>) -> Result<(), ProtocolError> {
-		self.write_all(buf).map_err(|_| ProtocolError::WriteError)
+	fn write_bytes(&mut self, buf: Vec<u8>) -> Result<(), DataError> {
+		self.write_all(&buf).map_err(|_| DataError::WriteError)
 	}
 }

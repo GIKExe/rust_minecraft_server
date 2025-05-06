@@ -1,4 +1,5 @@
-use std::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream};
+
 
 
 
@@ -7,29 +8,18 @@ pub enum InetError {
 	ConnectionClosed
 }
 
-
-
 pub struct Server {
-	host: String,
-	port: u16,
 	listener: TcpListener
 }
 
 impl Server {
-	pub fn new(host: &str, port: u16) -> Result<Self, InetError> {
-		Ok(Server {
-			host: host.to_string(),
-			port,
-			listener: TcpListener::bind(format!("{host}:{port}")).map_err(|_| InetError::BindError)?
-		})
+	pub async fn new(addr: &str) -> Result<Self, InetError> {
+		Ok(Server { listener: TcpListener::bind(addr).await.map_err(|_| InetError::BindError)? })
 	}
 
-	pub fn accept(&self) -> TcpStream {
-		loop {
-			match self.listener.accept() {
-				Ok((stream, _)) => return stream,
-				Err(_) => continue
-			}
-		}
+	pub async fn accept(&self) -> TcpStream {
+		loop { match self.listener.accept().await {
+			Ok((stream, _)) => return stream, Err(_) => continue
+		}}
 	}
 }
