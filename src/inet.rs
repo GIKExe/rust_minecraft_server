@@ -2,7 +2,7 @@ use tokio::net::{TcpListener, TcpStream};
 
 
 
-
+#[derive(Debug)]
 pub enum InetError {
 	BindError,
 	ConnectionClosed
