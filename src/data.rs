@@ -1,5 +1,7 @@
 use std::io::{Read, Write};
 
+use tokio::io::{AsyncRead, AsyncReadExt};
+
 use crate::inet::InetError;
 
 
@@ -13,23 +15,67 @@ pub enum DataError {
 	Inet(InetError),
 }
 
+pub trait ReadLike {
+	type Output;
+	fn _read_bytes(self, size: usize) -> Self::Output;
+}
 
+impl <R: Read> ReadLike for &mut R {
+	type Output = Result<Vec<u8>, DataError>;
+
+	fn _read_bytes(self, size: usize) -> Self::Output {
+		let mut buf = vec![0; size];
+		let mut read = 0;
+		while read < size {
+			match self.read(&mut buf[read..]) {
+				Ok(0) => return Err(DataError::Inet(InetError::ConnectionClosed)),
+				Ok(n) => read+=n,
+				Err(_) => return Err(DataError::ReadError)
+			}
+		}; Ok(buf)
+	}
+}
+
+#[cfg(feature = "async")]
+#[async_trait]
+impl <R: AsyncRead + Unpin + Send> ReadLike for &mut R {
+	type Output = Result<Vec<u8>, DataError>;
+
+	async fn _read_bytes(self, size: usize) -> Self::Output {
+		let mut buf = vec![0; size];
+		let mut read = 0;
+		while read < size {
+			match AsyncReadExt::read(&mut self, &mut buf[read..]).await {
+				Ok(0) => return Err(DataError::Inet(InetError::ConnectionClosed)),
+				Ok(n) => read += n,
+				Err(_) => return Err(DataError::ReadError),
+			}
+		}
+		Ok(buf)
+	}
+}
+
+#[cfg_attr(feature = "async", async_trait)]
 pub trait DataReader {
+	 #[cfg(not(feature = "async"))]
 	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError>;
+
+	#[cfg(feature = "async")]
+	async fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError>;
 
 	fn read_byte(&mut self) -> Result<u8, DataError> {
 		Ok(self.read_bytes(1)?[0])
 	}
 
-	fn read_byte_signed(&mut self) -> Result<i8, DataError> {
+	fn read_signed_byte(&mut self) -> Result<i8, DataError> {
 		Ok(self.read_byte()? as i8)
 	}
 
 	fn read_short(&mut self) -> Result<u16, DataError> {
-		Ok((self.read_byte()? as u16) + ((self.read_byte()? as u16) << 8))
+		Ok(u16::from_be_bytes(self.read_bytes(2)?.try_into().unwrap()))
 	}
 
-	fn read_short_signed(&mut self) -> Result<i16, DataError> {
+	fn read_signed_short(&mut self) -> Result<i16, DataError> {
 		Ok(self.read_short()? as i16)
 	}
 
@@ -53,17 +99,17 @@ pub trait DataReader {
 }
 
 impl <R: Read> DataReader for R {
+	#[cfg(not(feature = "async"))]
 	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
-		let mut buf = vec![0; size];
-		match self.read(&mut buf) {
-			Err(_) => return Err(DataError::ReadError),
-			Ok(n) => if n == 0 {
-				return Err(DataError::Inet(InetError::ConnectionClosed));
-			} else if n < size {
-				buf.truncate(n);
-				buf.append(&mut self.read_bytes(size - n)?);
-			}
-		}; Ok(buf)
+		self._read_bytes(size)
+	}
+}
+
+#[cfg(feature = "async")]
+#[async_trait]
+impl<R: AsyncRead + Unpin + Send> DataReader for R {
+	async fn _read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
+		self.read_bytes(size).await
 	}
 }
 
