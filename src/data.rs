@@ -8,12 +8,47 @@ use crate::inet::InetError;
 pub enum DataError {
 	ReadError,
 	WriteError,
+	VarIntIsSoBig,
+	StringDecodeError,
 	Inet(InetError),
 }
 
 
 pub trait DataReader {
 	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError>;
+	fn read_byte(&mut self) -> Result<u8, DataError> {
+		Ok(self.read_bytes(1)?[0])
+	}
+
+	fn read_byte_signed(&mut self) -> Result<i8, DataError> {
+		Ok(self.read_bytes(1)?[0] as i8)
+	}
+
+	fn read_short(&mut self) -> Result<u16, DataError> {
+		Ok((self.read_byte()? as u16) + ((self.read_byte()? as u16) << 8))
+	}
+
+	fn read_short_signed(&mut self) -> Result<i16, DataError> {
+		Ok(self.read_short()? as i16)
+	}
+
+	fn read_varint(&mut self) -> Result<i32, DataError> {
+		let mut value = 0;
+		let mut position = 0;
+		loop {
+			let byte = self.read_byte()?;
+			value |= ((byte & 0x7F) << position) as i32;
+			if (byte & 0x80) == 0 {return Ok(value)};
+			position += 7;
+			if position >= 32 {return Err(DataError::VarIntIsSoBig)};
+		}
+	}
+
+	fn read_string(&mut self) -> Result<String, DataError> {
+		let size = self.read_varint()?;
+		let vec = self.read_bytes(size as usize)?;
+		String::from_utf8(vec).map_err(|_| DataError::StringDecodeError)
+	}
 }
 
 impl <R: Read> DataReader for R {
