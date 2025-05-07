@@ -16,12 +16,13 @@ pub enum DataError {
 
 pub trait DataReader {
 	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError>;
+
 	fn read_byte(&mut self) -> Result<u8, DataError> {
 		Ok(self.read_bytes(1)?[0])
 	}
 
 	fn read_byte_signed(&mut self) -> Result<i8, DataError> {
-		Ok(self.read_bytes(1)?[0] as i8)
+		Ok(self.read_byte()? as i8)
 	}
 
 	fn read_short(&mut self) -> Result<u16, DataError> {
