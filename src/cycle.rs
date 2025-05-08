@@ -1,7 +1,7 @@
 
 use tokio::net::TcpStream;
 
-use crate::data::{clientbound, serverbound, DataError, AsyncReader, DataWriter, Packet, TextComponentBuilder};
+use crate::data::{clientbound, serverbound, AsyncReader, AsyncWriter, DataError, Packet, Reader, TextComponentBuilder, Writer};
 
 
 #[derive(Debug)]
@@ -33,10 +33,10 @@ pub async fn main(mut stream: TcpStream) {
 async fn read_first_packet(stream: &mut TcpStream) -> Result<(), PacketError> {
 	let mut packet = stream.read_packet(None).await?;
 	if packet.id() != 0 { return Err(PacketError::WrongPacketID);}
-	let version = packet.read_varint().await?;
-	let host = packet.read_string().await?;
-	let port = packet.read_short().await?;
-	let ns = packet.read_varint().await?;
+	let version = packet.read_varint()?;
+	let host = packet.read_string()?;
+	let port = packet.read_short()?;
+	let ns = packet.read_varint()?;
 
 	if version != 770 {
 		let mut packet = Packet::empty(0x00);
@@ -45,7 +45,7 @@ async fn read_first_packet(stream: &mut TcpStream) -> Result<(), PacketError> {
 			.text("Версия игры отличается от 1.21.5")
 			.color("red")
 			.build();
-		packet.write_string(&component.as_json()?).await?;
+		packet.write_string(&component.as_json()?)?;
 		return Ok(stream.write_packet(packet, None).await?);
 	}
 
@@ -70,13 +70,13 @@ async fn the_status(stream: &mut TcpStream) -> Result<(), PacketError> {
 			\"online\": 1
 		}
 	}";
-	p.write_string(status).await?;
+	p.write_string(status)?;
 	stream.write_packet(p, None).await?;
 
 	let mut packet = stream.read_packet(None).await?;
 	if packet.id() != 1 { return Err(PacketError::WrongPacketID); }
 	let mut p = Packet::empty(clientbound::status::PONG_RESPONSE);
-	p.write_long(packet.read_long().await?).await?;
+	p.write_long(packet.read_long()?)?;
 	stream.write_packet(p, None).await?;
 
 	Ok(())
@@ -91,7 +91,7 @@ async fn the_login(stream: &mut TcpStream, data: (i32, String, u16)) -> Result<(
 			.text("Версия игры отличается от 1.21.5")
 			.color("red")
 			.build();
-		packet.write_string(&component.as_json()?).await?;
+		packet.write_string(&component.as_json()?)?;
 		return Ok(stream.write_packet(packet, None).await?);
 	}
 
@@ -109,15 +109,15 @@ async fn the_login(stream: &mut TcpStream, data: (i32, String, u16)) -> Result<(
 
 	let mut packet = stream.read_packet(None).await?;
 	if packet.id() != serverbound::login::START { return Err(PacketError::WrongPacketID); }
-	let username = packet.read_string().await?;
-	let uuid = packet.read_uuid().await?;
+	let username = packet.read_string()?;
+	let uuid = packet.read_uuid()?;
 
 	println!("Адрес клиента: {:?}", stream.peer_addr());
 	println!("Адрес сервера: {}:{}", data.1, data.2);
 	println!("Username: {username}\n UUID: {:X}", uuid);
 
 	let mut packet = Packet::empty(clientbound::login::SET_COMPRESSION);
-	packet.write_varint(512).await?;
+	packet.write_varint(512)?;
 
 	Ok(())
 }

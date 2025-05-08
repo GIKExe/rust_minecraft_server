@@ -1,12 +1,29 @@
-use std::io::{Cursor, ErrorKind, Read};
+use std::io::{Cursor, ErrorKind};
 
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::{io::AsyncReadExt, net::TcpStream};
 
 use crate::inet::InetError;
 
-use super::{decompress, packet::Packet, DataError};
+use super::{decompress, packet::Packet, DataError, Reader};
 
 
+
+impl AsyncReader for TcpStream {
+	async fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
+		let mut buf = vec![0; size];
+		match AsyncReadExt::read_exact(self, &mut buf).await {
+			Ok(_) => Ok(buf),
+			Err(e) => match e.kind() {
+				ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe | ErrorKind::ConnectionReset => {
+					Err(DataError::Inet(InetError::ConnectionClosed))
+				}
+				_ => {
+					Err(DataError::ReadError)
+				},
+			}
+		}
+	}
+}
 
 pub trait AsyncReader {
 	async fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError>;
@@ -51,7 +68,7 @@ pub trait AsyncReader {
 			data = self.read_bytes(packet_lenght).await?;
 		}
 		let mut cursor = Cursor::new(data);
-		let id = cursor.read_varint().await?;
+		let id = cursor.read_varint()?;
 		Ok(Packet::new(id as u8, cursor))
 	}
 
@@ -85,22 +102,5 @@ pub trait AsyncReader {
 		Ok(u128::from_be_bytes(
 			self.read_bytes(16).await?.try_into().unwrap()
 		))
-	}
-}
-
-impl<R: AsyncRead + Unpin> AsyncReader for R {
-	async fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
-		let mut buf = vec![0; size];
-		match AsyncReadExt::read_exact(self, &mut buf).await {
-			Ok(_) => Ok(buf),
-			Err(e) => match e.kind() {
-				ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe | ErrorKind::ConnectionReset => {
-					Err(DataError::Inet(InetError::ConnectionClosed))
-				}
-				_ => {
-					Err(DataError::ReadError)
-				},
-			}
-		}
 	}
 }

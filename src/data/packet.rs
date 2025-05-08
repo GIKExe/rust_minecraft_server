@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use super::{DataError, async_reader::AsyncReader, writer::DataWriter};
+use super::{DataError, Reader, Writer};
 
 #[derive(Debug, Clone)]
 pub struct Packet {
@@ -84,14 +84,14 @@ impl From<Packet> for Cursor<Vec<u8>> {
 	}
 }
 
-impl AsyncReader for Packet {
-	async fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
-		self.cursor.read_bytes(size).await
+impl Reader for Packet {
+	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
+		self.cursor.read_bytes(size)
 	}
 }
 
-impl DataWriter for Packet {
-	async fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), DataError> {
-		self.cursor.write_bytes(bytes).await
+impl Writer for Packet {
+	fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), DataError> {
+		self.cursor.write_bytes(bytes)
 	}
 }
