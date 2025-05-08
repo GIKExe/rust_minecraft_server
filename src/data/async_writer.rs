@@ -52,7 +52,7 @@ pub trait AsyncWriter {
 
 			if data_buf.len() > threshold {
 				packet_buf.write_varint(data_buf.len() as i32)?;
-				let compressed_data = compress(&data_buf, 5)?;
+				let compressed_data = compress(&data_buf)?;
 				Write::write_all(&mut packet_buf, &compressed_data).or(Err(DataError::WriteError))?;
 			} else {
 				packet_buf.write_varint(0)?;

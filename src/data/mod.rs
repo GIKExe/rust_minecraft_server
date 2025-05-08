@@ -1,5 +1,7 @@
 use std::io::{Read, Write};
 
+use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
+
 use crate::inet::InetError;
 
 mod async_reader;
@@ -30,8 +32,8 @@ pub fn decompress(bytes: &[u8]) -> Result<Vec<u8>, DataError> {
 	Ok(output)
 }
 
-pub fn compress(bytes: &[u8], compression: u32) -> Result<Vec<u8>, DataError> {
-	let mut encoder = ZlibEncoder::new(Vec::new(), Compression::new(compression));
+pub fn compress(bytes: &[u8]) -> Result<Vec<u8>, DataError> {
+	let mut encoder = ZlibEncoder::new(Vec::new(), Compression::new(1));
 	encoder.write_all(bytes).or(Err(DataError::ZlibError))?;
 	encoder.finish().or(Err(DataError::ZlibError))
 }
@@ -40,7 +42,6 @@ pub use async_reader::*;
 pub use reader::*;
 pub use async_writer::*;
 pub use writer::*;
-use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
 pub use packet::*;
 pub use packet_id::{clientbound, serverbound};
 pub use component::*;

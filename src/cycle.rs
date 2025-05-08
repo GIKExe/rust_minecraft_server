@@ -1,5 +1,5 @@
 
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, time::Sleep};
 
 use crate::data::{clientbound, serverbound, AsyncReader, AsyncWriter, DataError, Packet, Reader, TextComponentBuilder, Writer};
 
@@ -50,10 +50,13 @@ async fn read_first_packet(stream: &mut TcpStream) -> Result<(), PacketError> {
 	}
 
 	match ns {
-		1 => the_status(stream).await,
-		2 => the_login(stream, (version, host, port)).await,
-		_ => Err(PacketError::NextStateIncorrect)
-	}
+		1 => return the_status(stream).await,
+		2 => the_login(stream, (version, host, port)).await?,
+		_ => return Err(PacketError::NextStateIncorrect)
+	};
+
+	the_configuration(stream).await?;
+	Ok(())
 }
 
 async fn the_status(stream: &mut TcpStream) -> Result<(), PacketError> {
@@ -112,12 +115,29 @@ async fn the_login(stream: &mut TcpStream, data: (i32, String, u16)) -> Result<(
 	let username = packet.read_string()?;
 	let uuid = packet.read_uuid()?;
 
-	println!("Адрес клиента: {:?}", stream.peer_addr());
-	println!("Адрес сервера: {}:{}", data.1, data.2);
-	println!("Username: {username}\n UUID: {:X}", uuid);
+	// println!("Адрес клиента: {}", stream.peer_addr().unwrap());
+	// println!("Адрес сервера: {}:{}", data.1, data.2);
+	// println!("Username: {username}\nUUID: {:X}", uuid);
 
+	let threshold = 512usize;
 	let mut packet = Packet::empty(clientbound::login::SET_COMPRESSION);
-	packet.write_varint(512)?;
+	packet.write_varint(threshold as i32)?;
+	stream.write_packet(packet, None).await?;
+
+	let mut packet = Packet::empty(clientbound::login::SUCCESS);
+	packet.write_uuid(uuid)?;
+	packet.write_string(&username)?;
+	packet.write_varint(0)?;
+	stream.write_packet(packet, Some(threshold)).await?;
+
+	let packet = stream.read_packet(Some(threshold)).await?;
+	if packet.id() != serverbound::login::ACKNOWLEDGED { return Err(PacketError::WrongPacketID); }
 
 	Ok(())
+}
+
+async fn the_configuration(stream: &mut TcpStream) -> Result<(), PacketError> {
+	loop {
+
+	}
 }
