@@ -9,6 +9,7 @@ pub enum PacketError {
 	WrongPacketID,
 	Data(DataError),
 	NextStateIncorrect,
+	OptionIsNone,
 }
 
 impl From<DataError> for PacketError {
@@ -17,50 +18,73 @@ impl From<DataError> for PacketError {
 	}
 }
 
-pub async fn main(mut stream: TcpStream) {
-	let Ok(addr) = stream.peer_addr() else {
-		return;
-	};
+pub struct Connection {
+	pub stream: TcpStream,
+
+	pub version: Option<i32>,
+	pub host: Option<String>,
+	pub port: Option<u16>,
+
+	pub username: Option<String>,
+	pub uuid: Option<u128>,
+
+	pub threshold: Option<usize>,
+}
+
+impl Connection {
+	pub fn new(stream: TcpStream) -> Self {
+		Connection {
+			stream,
+			version: None,
+			host: None,
+			port: None,
+			username: None,
+			uuid: None,
+			threshold: None,
+		}
+	}
+
+	pub async fn read_packet(&mut self) -> Result<Packet, PacketError> {
+		Ok(self.stream.read_packet(self.threshold).await?)
+	}
+
+	pub async fn write_packet(&mut self, packet: Packet) -> Result<(), PacketError> {
+		Ok(self.stream.write_packet(packet, self.threshold).await?)
+	}
+}
+
+pub async fn main(stream: TcpStream) {
+	let mut conn = Connection::new(stream);
+	let Ok(addr) = conn.stream.peer_addr() else { return; };
 	println!("Подключение: {addr}");
 	// читаем первый пакет
-	match read_first_packet(&mut stream).await {
+	match read_first_packet(&mut conn).await {
 		Ok(_) => {}, Err(e) => println!("Ошибка во время обработки пакета: {e:?}")
 	}
 	println!("Отключение: {addr}");
 	println!();
 }
 
-async fn read_first_packet(stream: &mut TcpStream) -> Result<(), PacketError> {
-	let mut packet = stream.read_packet(None).await?;
+async fn read_first_packet(conn: &mut Connection) -> Result<(), PacketError> {
+	let mut packet = conn.stream.read_packet(None).await?;
 	if packet.id() != 0 { return Err(PacketError::WrongPacketID);}
-	let version = packet.read_varint()?;
-	let host = packet.read_string()?;
-	let port = packet.read_short()?;
+	conn.version = Some(packet.read_varint()?);
+	conn.host = Some(packet.read_string()?);
+	conn.port = Some(packet.read_short()?);
 	let ns = packet.read_varint()?;
 
-	if version != 770 {
-		let mut packet = Packet::empty(0x00);
-		let component =
-			TextComponentBuilder::new()
-			.text("Версия игры отличается от 1.21.5")
-			.color("red")
-			.build();
-		packet.write_string(&component.as_json()?)?;
-		return Ok(stream.write_packet(packet, None).await?);
-	}
-
 	match ns {
-		1 => return the_status(stream).await,
-		2 => the_login(stream, (version, host, port)).await?,
+		1 => return the_status(conn).await,
+		2 => the_login(conn).await?,
 		_ => return Err(PacketError::NextStateIncorrect)
 	};
 
-	the_configuration(stream).await?;
+	the_configuration(conn).await?;
 	Ok(())
 }
 
-async fn the_status(stream: &mut TcpStream) -> Result<(), PacketError> {
-	let packet = stream.read_packet(None).await?;
+async fn the_status(conn: &mut Connection) -> Result<(), PacketError> {
+	let packet = conn.stream.read_packet(None).await?;
 	if packet.id() != 0 { return Err(PacketError::WrongPacketID); }
 	let mut p = Packet::empty(clientbound::status::RESPONSE);
 	let status = "{
@@ -74,20 +98,20 @@ async fn the_status(stream: &mut TcpStream) -> Result<(), PacketError> {
 		}
 	}";
 	p.write_string(status)?;
-	stream.write_packet(p, None).await?;
+	conn.write_packet(p).await?;
 
-	let mut packet = stream.read_packet(None).await?;
+	let mut packet = conn.stream.read_packet(None).await?;
 	if packet.id() != 1 { return Err(PacketError::WrongPacketID); }
 	let mut p = Packet::empty(clientbound::status::PONG_RESPONSE);
 	p.write_long(packet.read_long()?)?;
-	stream.write_packet(p, None).await?;
+	conn.write_packet(p).await?;
 
 	Ok(())
 }
 
-async fn the_login(stream: &mut TcpStream, data: (i32, String, u16)) -> Result<(), PacketError> {
+async fn the_login(conn: &mut Connection) -> Result<(), PacketError> {
 
-	if data.0 != 770 {
+	if conn.version != Some(770) {
 		let mut packet = Packet::empty(clientbound::login::DISCONNECT);
 		let component =
 			TextComponentBuilder::new()
@@ -95,25 +119,13 @@ async fn the_login(stream: &mut TcpStream, data: (i32, String, u16)) -> Result<(
 			.color("red")
 			.build();
 		packet.write_string(&component.as_json()?)?;
-		return Ok(stream.write_packet(packet, None).await?);
+		return conn.write_packet(packet).await;
 	}
 
-	// println!("Версия протокола: {}", data.0);
-	// println!("Адрес сервера: {}:{}", data.1, data.2);
-
-	// let mut packet = Packet::empty(clientbound::login::DISCONNECT);
-	// let component =
-	// 	TextComponentBuilder::new()
-	// 	.text("Вы кто такие? Я вас не звал. Идите нахуй.")
-	// 	.color("red")
-	// 	.build();
-	// packet.write_string(&component.as_json()?).await?;
-	// return Ok(stream.write_packet(packet, None).await?);
-
-	let mut packet = stream.read_packet(None).await?;
+	let mut packet = conn.read_packet().await?;
 	if packet.id() != serverbound::login::START { return Err(PacketError::WrongPacketID); }
-	let username = packet.read_string()?;
-	let uuid = packet.read_uuid()?;
+	conn.username = Some(packet.read_string()?);
+	conn.uuid = Some(packet.read_uuid()?);
 
 	// println!("Адрес клиента: {}", stream.peer_addr().unwrap());
 	// println!("Адрес сервера: {}:{}", data.1, data.2);
@@ -122,21 +134,24 @@ async fn the_login(stream: &mut TcpStream, data: (i32, String, u16)) -> Result<(
 	let threshold = 512usize;
 	let mut packet = Packet::empty(clientbound::login::SET_COMPRESSION);
 	packet.write_varint(threshold as i32)?;
-	stream.write_packet(packet, None).await?;
+	conn.write_packet(packet).await?;
+	conn.threshold = Some(threshold);
 
 	let mut packet = Packet::empty(clientbound::login::SUCCESS);
-	packet.write_uuid(uuid)?;
-	packet.write_string(&username)?;
+	packet.write_uuid(conn.uuid.ok_or(PacketError::OptionIsNone)?)?;
+	packet.write_string(conn.username.clone().ok_or(PacketError::OptionIsNone)?.as_ref())?;
 	packet.write_varint(0)?;
-	stream.write_packet(packet, Some(threshold)).await?;
+	conn.write_packet(packet).await?;
 
-	let packet = stream.read_packet(Some(threshold)).await?;
+	let packet = conn.read_packet().await?;
 	if packet.id() != serverbound::login::ACKNOWLEDGED { return Err(PacketError::WrongPacketID); }
 
 	Ok(())
 }
 
-async fn the_configuration(stream: &mut TcpStream) -> Result<(), PacketError> {
+async fn the_configuration(conn: &mut Connection) -> Result<(), PacketError> {
+	let packet = Packet::empty(clientbound::configuration::FINISH);
+	conn.write_packet(packet).await?;
 	loop {
 
 	}
