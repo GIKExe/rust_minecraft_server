@@ -25,9 +25,10 @@ pub enum DataError {
 	DeSerializationError,
 	ZlibError,
 	NBTError,
+	NBTCompoundError,
 }
 
-type Buffer = Cursor<Vec<u8>>;
+pub type Buffer = Cursor<Vec<u8>>;
 
 pub fn decompress(bytes: &[u8]) -> Result<Vec<u8>, DataError> {
 	let mut decoder = ZlibDecoder::new(bytes);

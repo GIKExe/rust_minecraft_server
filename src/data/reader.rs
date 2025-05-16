@@ -6,6 +6,8 @@ use super::{decompress, Buffer, DataError, Packet};
 
 impl Reader for Buffer {
 	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
+		println!("Read bytes: {size}");
+		if size == 0 { return Ok(Vec::new());};
 		let mut buf = vec![0; size];
 		match self.read_exact(&mut buf) {
 			Ok(_) => Ok(buf),
