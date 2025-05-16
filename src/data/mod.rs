@@ -12,6 +12,7 @@ mod writer;
 mod packet;
 mod packet_id;
 mod component;
+mod nbt;
 
 #[derive(Debug)]
 pub enum DataError {
@@ -45,3 +46,4 @@ pub use writer::*;
 pub use packet::*;
 pub use packet_id::{clientbound, serverbound};
 pub use component::*;
+pub use nbt::*;

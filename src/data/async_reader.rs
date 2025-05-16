@@ -32,10 +32,6 @@ pub trait AsyncReader {
 		Ok(self.read_bytes(1).await?[0])
 	}
 
-	async fn read_signed_byte(&mut self) -> Result<i8, DataError> {
-		Ok(self.read_byte().await? as i8)
-	}
-
 	async fn read_varint_size(&mut self) -> Result<(i32, usize), DataError> {
 		let mut value = 0;
 		let mut position = 0;
@@ -70,37 +66,5 @@ pub trait AsyncReader {
 		let mut cursor = Cursor::new(data);
 		let id = cursor.read_varint()?;
 		Ok(Packet::new(id as u8, cursor))
-	}
-
-	async fn read_short(&mut self) -> Result<u16, DataError> {
-		Ok(u16::from_be_bytes(
-			self.read_bytes(2).await?.try_into().unwrap()
-		))
-	}
-
-	async fn read_signed_short(&mut self) -> Result<i16, DataError> {
-		Ok(self.read_short().await? as i16)
-	}
-
-	async fn read_string(&mut self) -> Result<String, DataError> {
-		let size = self.read_varint().await?;
-		let vec = self.read_bytes(size as usize).await?;
-		String::from_utf8(vec).or( Err(DataError::StringDecodeError))
-	}
-
-	async fn read_long(&mut self) -> Result<u64, DataError> {
-		Ok(u64::from_be_bytes(
-			self.read_bytes(8).await?.try_into().unwrap()
-		))
-	}
-
-	async fn read_signed_long(&mut self) -> Result<i64, DataError> {
-		Ok(self.read_long().await? as i64)
-	}
-
-	async fn read_uuid(&mut self) -> Result<u128, DataError> {
-		Ok(u128::from_be_bytes(
-			self.read_bytes(16).await?.try_into().unwrap()
-		))
 	}
 }
