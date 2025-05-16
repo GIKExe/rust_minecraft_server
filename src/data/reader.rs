@@ -1,10 +1,10 @@
 use std::io::{Cursor, Read};
 
-use super::{decompress, DataError, Packet};
+use super::{decompress, Buffer, DataError, Packet};
 
 
 
-impl<R: Read> Reader for R {
+impl Reader for Buffer {
 	fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>, DataError> {
 		let mut buf = vec![0; size];
 		match self.read_exact(&mut buf) {
@@ -71,10 +71,10 @@ pub trait Reader {
 		Ok(self.read_short()? as i16)
 	}
 
-	fn read_string(&mut self) -> Result<String, DataError> {
-		let size = self.read_varint()?;
-		let vec = self.read_bytes(size as usize)?;
-		String::from_utf8(vec).or( Err(DataError::StringDecodeError))
+	fn read_signed_int(&mut self) -> Result<i32, DataError> {
+		Ok(i32::from_be_bytes(
+			self.read_bytes(4)?.try_into().unwrap()
+		))
 	}
 
 	fn read_long(&mut self) -> Result<u64, DataError> {
@@ -85,6 +85,24 @@ pub trait Reader {
 
 	fn read_signed_long(&mut self) -> Result<i64, DataError> {
 		Ok(self.read_long()? as i64)
+	}
+
+	fn read_float(&mut self) -> Result<f32, DataError> {
+		Ok(f32::from_be_bytes(
+			self.read_bytes(4)?.try_into().unwrap()
+		))
+	}
+
+	fn read_double(&mut self) -> Result<f64, DataError> {
+		Ok(f64::from_be_bytes(
+			self.read_bytes(8)?.try_into().unwrap()
+		))
+	}
+
+	fn read_string(&mut self) -> Result<String, DataError> {
+		let size = self.read_varint()?;
+		let vec = self.read_bytes(size as usize)?;
+		String::from_utf8(vec).or( Err(DataError::StringDecodeError))
 	}
 
 	fn read_uuid(&mut self) -> Result<u128, DataError> {

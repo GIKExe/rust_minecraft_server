@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 
 use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
 
@@ -24,7 +24,10 @@ pub enum DataError {
 	SerializationError,
 	DeSerializationError,
 	ZlibError,
+	NBTError,
 }
+
+type Buffer = Cursor<Vec<u8>>;
 
 pub fn decompress(bytes: &[u8]) -> Result<Vec<u8>, DataError> {
 	let mut decoder = ZlibDecoder::new(bytes);
