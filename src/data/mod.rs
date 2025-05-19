@@ -12,7 +12,6 @@ mod writer;
 mod packet;
 mod packet_id;
 mod component;
-mod nbt;
 
 #[derive(Debug)]
 pub enum DataError {
@@ -25,7 +24,7 @@ pub enum DataError {
 	DeSerializationError,
 	ZlibError,
 	NBTError,
-	NBTCompoundError,
+	// NBTCompoundError,
 }
 
 pub type Buffer = Cursor<Vec<u8>>;
@@ -50,4 +49,3 @@ pub use writer::*;
 pub use packet::*;
 pub use packet_id::{clientbound, serverbound};
 pub use component::*;
-pub use nbt::*;

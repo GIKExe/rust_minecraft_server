@@ -1,5 +1,7 @@
 
-use tokio::{net::TcpStream, time::Sleep};
+use std::{thread::sleep, time::Duration};
+
+use tokio::net::TcpStream;
 
 use crate::data::{clientbound, serverbound, AsyncReader, AsyncWriter, DataError, Packet, Reader, TextComponentBuilder, Writer};
 
@@ -153,6 +155,6 @@ async fn the_configuration(conn: &mut Connection) -> Result<(), PacketError> {
 	let packet = Packet::empty(clientbound::configuration::FINISH);
 	conn.write_packet(packet).await?;
 	loop {
-
+		sleep(Duration::from_secs(1));
 	}
 }

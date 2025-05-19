@@ -73,10 +73,14 @@ pub trait Reader {
 		Ok(self.read_short()? as i16)
 	}
 
-	fn read_signed_int(&mut self) -> Result<i32, DataError> {
-		Ok(i32::from_be_bytes(
+	fn read_int(&mut self) -> Result<u32, DataError> {
+		Ok(u32::from_be_bytes(
 			self.read_bytes(4)?.try_into().unwrap()
 		))
+	}
+
+	fn read_signed_int(&mut self) -> Result<i32, DataError> {
+		Ok(self.read_int()? as i32)
 	}
 
 	fn read_long(&mut self) -> Result<u64, DataError> {
